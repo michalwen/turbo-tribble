@@ -1,0 +1,9 @@
+##Navigate to directory in PowerShell###
+$path = ".\"
+$destination = "C:\Users\u25204\Documents\Reports\IN2023_Canyons_Planning\DirectorySummaryTest.txt"
+
+$results = Get-ChildItem .\* -Recurse | where {$_.extension -in ".doc",".docx",".xls",".xlsx", ".shp", ".all", ".hvc", ".gsf", ".tiff", ".asc", ".pdf", ".sgy", ".seg"}  | Select-Object Name, Extension, @{Name="Kbytes";Expression={ "{0:N0}" -f ($_.Length / 1Kb) }}
+$results | Sort-Object -Property extension | Out-File $destination
+$results|group extension|select Count,Name,@{l='Total KB';e={$_.Group | Measure-Object -Property kbytes -Sum|select -expand sum}}| Out-File $destination -Append
+
+##
