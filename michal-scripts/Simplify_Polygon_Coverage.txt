@@ -1,0 +1,104 @@
+#Polygon simplification process for AusSeabed legacy coverage data
+
+
+######################################################Start#of#Preload######################################################
+rm(list = ls()) #Generic reset for environment
+
+library(ggplot2) #
+library(magrittr) #
+library(sf) #'Simple Features' R package for reading, simplifying and writing shapefiles
+library(rgdal) #'R Geographic Data Abstraction Library' package for support
+library(raster) #'Raster' pacakge specifically treats raster datasets (e.g. 3D visualisation)
+
+#Remove hash to run package installations as needed
+#Installation scripts
+#install.packages("ggplot2")
+#install.packages("magrittr")
+#install.packages("sf")
+
+#Load plot function\ (widget to make comparisons of the data; 
+#credit: https://datascience.blog.wzb.eu/2021/03/15/simplifying-geospatial-features-in-r-with-sf-and-rmapshaper/)
+plot_map <- function(data, diff_to = NULL, strokecolor = NA, fillcolor = c('#097FB3', '#A13675'),
+                     alpha = 1, graticules = FALSE, zoom_to = NULL, zoom_level = NULL) {
+  target_crs <- st_crs(data)
+  
+  if (!is.null(zoom_level)) {
+    if (is.null(zoom_to)) {
+      zoom_to_xy <- st_sfc(st_point(c(0, 0)), crs = target_crs)
+    } else {
+      zoom_to_xy <- st_transform(st_sfc(st_point(zoom_to), crs = 4326), crs = target_crs)
+    }
+    
+    C <- 40075016.686   # ~ circumference of Earth in meters
+    x_span <- C / 2^zoom_level
+    y_span <- C / 2^(zoom_level+1)
+    
+    disp_window <- st_sfc(
+      st_point(st_coordinates(zoom_to_xy - c(x_span / 2, y_span / 2))),
+      st_point(st_coordinates(zoom_to_xy + c(x_span / 2, y_span / 2))),
+      crs = target_crs
+    )
+    
+    xlim <- st_coordinates(disp_window)[,'X']
+    ylim <- st_coordinates(disp_window)[,'Y']
+  } else {
+    xlim <- NULL
+    ylim <- NULL
+  }
+  
+  if (!is.null(diff_to)) {
+    shapebase <- diff_to
+    shapediff <- st_sym_difference(data, diff_to)
+  } else {
+    shapebase <- data
+    shapediff <- NULL
+  }
+  
+  p <- ggplot() +
+    geom_sf(data = shapebase, color = strokecolor, fill = fillcolor[1], alpha = alpha)
+  
+  if (!is.null(shapediff)) {
+    p <- p + geom_sf(data = shapediff, color = strokecolor, fill = fillcolor[2], alpha = alpha)
+  }
+  
+  p +
+    coord_sf(xlim = xlim,
+             ylim = ylim,
+             crs = target_crs,
+             datum = ifelse(graticules, target_crs$input, NA)) +
+    theme_bw()
+}
+
+######################################################End#of#Preload######################################################
+
+#Additional documentation available (see explanatory notes)
+#Full Dataset - script to broadly cover legacy dataset
+
+ASB_Coverage <- st_read('ASB_Coverage.shp') %>%
+  st_geometry() %>%
+#Enter coordinates approximately central to the dataset to minimise distortion
+  st_transform(crs = '+proj=aeqd +lat_0=-25.1 +lon_0=134.1') 
+
+#Can plot in widget by either using the full dataset extent or specifiy zoom level
+#Plot script - full dataset extent (as per central co-ordinates specified during vector loading)
+plot_map(ASB_Subset, graticules = TRUE)
+
+#Plot script - zoom level
+#Specify zoom level
+plot_map(ASB_Full, graticules = TRUE, zoom_to = c(147.9, -47.0),  
+         zoom_level = 10)
+
+#Simplifies polygon; tolerance unit == input file read  at 'St_read' step above
+ASB_Simp <- st_simplify(ASB_Subset, preserveTopology = FALSE, dTolerance = 10)
+plot_map(ASB_Simp)
+
+#Inspect simmplifcation results (optionally can be done in a GIS application
+#Specify co-ordinates to zoom into and zoom level
+plot_map(ASB_Simp, graticules = TRUE, zoom_to = c(147.9, -47.0),  
+         zoom_level = 10)
+
+#Write simplified polygon to shapefile
+#Designate output name
+st_write(ASB_Simp, dsn = "ASB_Subset.shp")
+
+######################################################EOF######################################################
